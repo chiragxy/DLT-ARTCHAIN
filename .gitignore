@@ -1,0 +1,46 @@
+# ==========================
+# General
+# ==========================
+*.log
+*.tmp
+*.swp
+*.DS_Store
+*.idea/
+.vscode/
+.env
+
+# ==========================
+# Foundry / Solidity
+# ==========================
+out/
+cache/
+broadcast/
+lib/
+
+# Ignore dependencies installed locally in lib/
+lib/**/*
+!lib/.gitmodules
+!lib/*.toml
+
+# ==========================
+# Rust / Cargo
+# ==========================
+/target/
+/Cargo.lock
+
+# ==========================
+# Node.js / Fabric samples
+# ==========================
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+dist/
+build/
+
+# ==========================
+# Other
+# ==========================
+*.rs.bk
+*.sol.bk
+*.orig

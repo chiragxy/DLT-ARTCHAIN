@@ -34,7 +34,7 @@ contract ArtChainNFTTest is Test {
         assertEq(artChainNFT.balanceOf(artist), 1);
         assertEq(artChainNFT.tokenURI(tokenId), uri);
         
-        ArtChainNFT.ArtMetadata memory artwork = artChainNFT.getArtwork(tokenId);
+        ArtChainNFT.ArtMetadata memory artwork = artChainNFT.getArtworkMetadata(tokenId);
         assertEq(artwork.title, title);
         assertEq(artwork.artist, artistName);
     }
@@ -55,7 +55,7 @@ contract ArtChainNFTTest is Test {
 
     function testGetArtworkRevertsForNonExistentToken() public {
         vm.expectRevert("Artwork does not exist");
-        artChainNFT.getArtwork(999);
+        artChainNFT.getArtworkMetadata(999);
     }
 
     function testTotalSupply() public {

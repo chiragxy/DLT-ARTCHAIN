@@ -4,11 +4,9 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
-    using Counters for Counters.Counter;
-    Counters.Counter private _tokenIdCounter;
+    uint256 private _tokenIdCounter = 1;
 
     struct ArtMetadata {
         string title;
@@ -22,32 +20,18 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
     mapping(uint256 => ArtMetadata) public artworks;
     mapping(uint256 => uint256) public transferHistory;
     mapping(address => uint256[]) private _ownerTokens;
-    
+
     uint256 public mintFee = 0.01 ether;
     uint256 public transferFee = 0.001 ether;
     bool public mintingEnabled = true;
     bool public transferFeesEnabled = false;
 
-    event ArtworkMinted(
-        uint256 indexed tokenId,
-        address indexed to,
-        string title,
-        string uri
-    );
-
-    event ArtworkTransferred(
-        uint256 indexed tokenId,
-        address indexed from,
-        address indexed to,
-        uint256 transferCount
-    );
-
+    event ArtworkMinted(uint256 indexed tokenId, address indexed to, string title, string uri);
+    event ArtworkTransferred(uint256 indexed tokenId, address indexed from, address indexed to, uint256 transferCount);
     event MintFeeUpdated(uint256 oldFee, uint256 newFee);
     event TransferFeeUpdated(uint256 oldFee, uint256 newFee);
 
-    constructor() ERC721("ArtChain NFT", "ACNFT") {
-        _tokenIdCounter.increment();
-    }
+    constructor() ERC721("ArtChain NFT", "ACNFT") Ownable(msg.sender) {}
 
     modifier mintingIsEnabled() {
         require(mintingEnabled, "Minting is currently disabled");
@@ -55,10 +39,11 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
     }
 
     modifier validTokenId(uint256 tokenId) {
-        require(_exists(tokenId), "Token does not exist");
+        require(_ownerOf(tokenId) != address(0), "Token does not exist");
         _;
     }
 
+    // ---------------- MINTING ----------------
     function mintArtwork(
         address to,
         string memory uri,
@@ -72,9 +57,7 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
         require(bytes(uri).length > 0, "URI cannot be empty");
         require(bytes(title).length > 0, "Title cannot be empty");
 
-        uint256 tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
-
+        uint256 tokenId = _tokenIdCounter++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
 
@@ -109,9 +92,7 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
         require(bytes(uri).length > 0, "URI cannot be empty");
         require(bytes(title).length > 0, "Title cannot be empty");
 
-        uint256 tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
-
+        uint256 tokenId = _tokenIdCounter++;
         _safeMint(to, tokenId);
         _setTokenURI(tokenId, uri);
 
@@ -140,19 +121,15 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
     ) public payable mintingIsEnabled returns (uint256[] memory) {
         uint256 length = recipients.length;
         require(length > 0, "Arrays cannot be empty");
-        require(length == uris.length, "Arrays length mismatch");
-        require(length == titles.length, "Arrays length mismatch");
-        require(length == artists.length, "Arrays length mismatch");
-        require(length == descriptions.length, "Arrays length mismatch");
-        require(length == imageHashes.length, "Arrays length mismatch");
+        require(length == uris.length && length == titles.length && 
+                length == artists.length && length == descriptions.length && 
+                length == imageHashes.length, "Arrays length mismatch");
         require(msg.value >= mintFee * length, "Insufficient mint fee for batch");
 
         uint256[] memory tokenIds = new uint256[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            uint256 tokenId = _tokenIdCounter.current();
-            _tokenIdCounter.increment();
-
+            uint256 tokenId = _tokenIdCounter++;
             _safeMint(recipients[i], tokenId);
             _setTokenURI(tokenId, uris[i]);
 
@@ -179,175 +156,202 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
         return tokenIds;
     }
 
-    function transferFrom(address from, address to, uint256 tokenId) 
-        public 
-        override 
-        payable
-        validTokenId(tokenId)
-    {
-        require(artworks[tokenId].transferable, "Token is not transferable");
-        require(_checkTransferFee(), "Insufficient transfer fee");
-
-        _handleTransferFee();
-        _updateOwnerTokens(from, to, tokenId);
-        _recordTransfer(tokenId, from, to);
-
-        super.transferFrom(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId) 
-        public 
-        override 
-        payable
-        validTokenId(tokenId)
-    {
-        require(artworks[tokenId].transferable, "Token is not transferable");
-        require(_checkTransferFee(), "Insufficient transfer fee");
-
-        _handleTransferFee();
-        _updateOwnerTokens(from, to, tokenId);
-        _recordTransfer(tokenId, from, to);
-
-        super.safeTransferFrom(from, to, tokenId);
-    }
-
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) 
-        public 
-        override 
-        payable
-        validTokenId(tokenId)
-    {
-        require(artworks[tokenId].transferable, "Token is not transferable");
-        require(_checkTransferFee(), "Insufficient transfer fee");
-
-        _handleTransferFee();
-        _updateOwnerTokens(from, to, tokenId);
-        _recordTransfer(tokenId, from, to);
-
-        super.safeTransferFrom(from, to, tokenId, data);
-    }
-
-    function transferWithMessage(
+    // ---------------- TRANSFERS ----------------
+    function transferFrom(
+        address from,
         address to,
-        uint256 tokenId,
-        string memory message
-    ) public payable validTokenId(tokenId) {
-        address from = ownerOf(tokenId);
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "Not approved or owner");
+        uint256 tokenId
+    ) public override(ERC721,IERC721) validTokenId(tokenId) {
         require(artworks[tokenId].transferable, "Token is not transferable");
-        require(_checkTransferFee(), "Insufficient transfer fee");
+        require(_isAuthorized(ownerOf(tokenId), _msgSender(), tokenId), "Transfer caller is not owner nor approved");
 
-        _handleTransferFee();
-        _updateOwnerTokens(from, to, tokenId);
-        _recordTransfer(tokenId, from, to);
-
-        _transfer(from, to, tokenId);
-    }
-
-    function bulkTransfer(
-        address[] memory recipients,
-        uint256[] memory tokenIds
-    ) public payable {
-        require(recipients.length == tokenIds.length, "Arrays length mismatch");
-        require(recipients.length > 0, "Arrays cannot be empty");
-
-        uint256 totalFee = transferFeesEnabled ? transferFee * tokenIds.length : 0;
-        require(msg.value >= totalFee, "Insufficient transfer fee for bulk transfer");
-
-        for (uint256 i = 0; i < tokenIds.length; i++) {
-            require(_exists(tokenIds[i]), "Token does not exist");
-            address from = ownerOf(tokenIds[i]);
-            require(_isApprovedOrOwner(_msgSender(), tokenIds[i]), "Not approved or owner");
-            require(artworks[tokenIds[i]].transferable, "Token is not transferable");
-
-            _updateOwnerTokens(from, recipients[i], tokenIds[i]);
-            _recordTransfer(tokenIds[i], from, recipients[i]);
-            _transfer(from, recipients[i], tokenIds[i]);
+        if (transferFeesEnabled && msg.value < transferFee) {
+            revert("Insufficient transfer fee");
         }
 
-        if (msg.value > totalFee) {
+        _removeTokenFromOwner(from, tokenId);
+        _ownerTokens[to].push(tokenId);
+        transferHistory[tokenId]++;
+
+        super.transferFrom(from, to, tokenId);
+
+        if (transferFeesEnabled && msg.value > transferFee) {
+            payable(msg.sender).transfer(msg.value - transferFee);
+        }
+
+        emit ArtworkTransferred(tokenId, from, to, transferHistory[tokenId]);
+    }
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory data
+    ) public override(ERC721,IERC721) validTokenId(tokenId) {
+        require(artworks[tokenId].transferable, "Token is not transferable");
+        require(_isAuthorized(ownerOf(tokenId), _msgSender(), tokenId), "Transfer caller is not owner nor approved");
+
+        if (transferFeesEnabled && msg.value < transferFee) {
+            revert("Insufficient transfer fee");
+        }
+
+        _removeTokenFromOwner(from, tokenId);
+        _ownerTokens[to].push(tokenId);
+        transferHistory[tokenId]++;
+
+        super.safeTransferFrom(from, to, tokenId, data);
+
+        if (transferFeesEnabled && msg.value > transferFee) {
+            payable(msg.sender).transfer(msg.value - transferFee);
+        }
+
+        emit ArtworkTransferred(tokenId, from, to, transferHistory[tokenId]);
+    }
+
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public override(ERC721, IERC721) {
+        safeTransferFrom(from, to, tokenId, "");
+    }
+
+    function transferArtwork(address to, uint256 tokenId) public payable validTokenId(tokenId) {
+        require(artworks[tokenId].transferable, "Token is not transferable");
+        require(ownerOf(tokenId) == _msgSender(), "You are not the owner of this token");
+        require(to != address(0), "Cannot transfer to zero address");
+        require(to != _msgSender(), "Cannot transfer to yourself");
+
+        if (transferFeesEnabled) {
+            require(msg.value >= transferFee, "Insufficient transfer fee");
+        }
+
+        address from = _msgSender();
+        _removeTokenFromOwner(from, tokenId);
+        _ownerTokens[to].push(tokenId);
+        transferHistory[tokenId]++;
+
+        _transfer(from, to, tokenId);
+
+        if (transferFeesEnabled && msg.value > transferFee) {
+            payable(msg.sender).transfer(msg.value - transferFee);
+        }
+
+        emit ArtworkTransferred(tokenId, from, to, transferHistory[tokenId]);
+    }
+
+    function batchTransfer(
+        address to,
+        uint256[] memory tokenIds
+    ) public payable {
+        require(to != address(0), "Cannot transfer to zero address");
+        require(to != _msgSender(), "Cannot transfer to yourself");
+        require(tokenIds.length > 0, "Token IDs array cannot be empty");
+
+        uint256 totalFee = transferFeesEnabled ? transferFee * tokenIds.length : 0;
+        if (transferFeesEnabled) {
+            require(msg.value >= totalFee, "Insufficient transfer fee for batch");
+        }
+
+        for (uint256 i = 0; i < tokenIds.length; i++) {
+            uint256 tokenId = tokenIds[i];
+            require(_ownerOf(tokenId) != address(0), "Token does not exist");
+            require(artworks[tokenId].transferable, "Token is not transferable");
+            require(ownerOf(tokenId) == _msgSender(), "You are not the owner of this token");
+
+            _removeTokenFromOwner(_msgSender(), tokenId);
+            _ownerTokens[to].push(tokenId);
+            transferHistory[tokenId]++;
+
+            _transfer(_msgSender(), to, tokenId);
+
+            emit ArtworkTransferred(tokenId, _msgSender(), to, transferHistory[tokenId]);
+        }
+
+        if (transferFeesEnabled && msg.value > totalFee) {
             payable(msg.sender).transfer(msg.value - totalFee);
         }
     }
 
-    function getArtwork(uint256 tokenId) public view validTokenId(tokenId) returns (ArtMetadata memory) {
-        return artworks[tokenId];
+    // ---------------- BURN ----------------
+    function burnArtwork(uint256 tokenId) public validTokenId(tokenId) {
+        require(_isAuthorized(ownerOf(tokenId), _msgSender(), tokenId), "Burn caller is not owner nor approved");
+        _burn(tokenId);
     }
 
+    function _burn(address account,uint256 tokenId) internal virtual{
+        address owner = ownerOf(tokenId);
+        _removeTokenFromOwner(owner, tokenId);
+        delete artworks[tokenId];
+        delete transferHistory[tokenId];
+        super._burn(tokenId);
+    }
+
+    // ---------------- ADMINISTRATIVE ----------------
+    function toggleMinting() public onlyOwner {
+        mintingEnabled = !mintingEnabled;
+    }
+
+    function toggleTransferFees() public onlyOwner {
+        transferFeesEnabled = !transferFeesEnabled;
+    }
+
+    function updateMintFee(uint256 newFee) public onlyOwner {
+        uint256 oldFee = mintFee;
+        mintFee = newFee;
+        emit MintFeeUpdated(oldFee, newFee);
+    }
+
+    function updateTransferFee(uint256 newFee) public onlyOwner {
+        uint256 oldFee = transferFee;
+        transferFee = newFee;
+        emit TransferFeeUpdated(oldFee, newFee);
+    }
+
+    function setTokenTransferable(uint256 tokenId, bool transferable) public onlyOwner validTokenId(tokenId) {
+        artworks[tokenId].transferable = transferable;
+    }
+
+    function withdrawFees() public onlyOwner {
+        uint256 balance = address(this).balance;
+        require(balance > 0, "No fees to withdraw");
+        payable(owner()).transfer(balance);
+    }
+
+    // ---------------- VIEW FUNCTIONS ----------------
     function totalSupply() public view returns (uint256) {
-        return _tokenIdCounter.current() - 1;
+        return _tokenIdCounter - 1;
+    }
+
+    function getTokensByOwner(address tokenOwner) public view returns (uint256[] memory) {
+        return _ownerTokens[tokenOwner];
+    }
+
+    function getArtworkMetadata(uint256 tokenId) public view validTokenId(tokenId) returns (ArtMetadata memory) {
+        return artworks[tokenId];
     }
 
     function getTransferCount(uint256 tokenId) public view validTokenId(tokenId) returns (uint256) {
         return transferHistory[tokenId];
     }
 
-    function getTokensByOwner(address owner) public view returns (uint256[] memory) {
-        return _ownerTokens[owner];
-    }
-
     function isTransferable(uint256 tokenId) public view validTokenId(tokenId) returns (bool) {
         return artworks[tokenId].transferable;
     }
 
-    function setTransferable(uint256 tokenId, bool transferable) public onlyOwner validTokenId(tokenId) {
-        artworks[tokenId].transferable = transferable;
-    }
-
-    function setMintFee(uint256 _mintFee) public onlyOwner {
-        uint256 oldFee = mintFee;
-        mintFee = _mintFee;
-        emit MintFeeUpdated(oldFee, _mintFee);
-    }
-
-    function setTransferFee(uint256 _transferFee) public onlyOwner {
-        uint256 oldFee = transferFee;
-        transferFee = _transferFee;
-        emit TransferFeeUpdated(oldFee, _transferFee);
-    }
-
-    function setMintingEnabled(bool enabled) public onlyOwner {
-        mintingEnabled = enabled;
-    }
-
-    function setTransferFeesEnabled(bool enabled) public onlyOwner {
-        transferFeesEnabled = enabled;
-    }
-
-    function withdrawFunds() public onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No funds to withdraw");
-        payable(owner()).transfer(balance);
-    }
-
-    function _checkTransferFee() internal view returns (bool) {
-        if (!transferFeesEnabled) return true;
-        return msg.value >= transferFee;
-    }
-
-    function _handleTransferFee() internal {
-        if (transferFeesEnabled && msg.value > transferFee) {
-            payable(msg.sender).transfer(msg.value - transferFee);
-        }
-    }
-
-    function _recordTransfer(uint256 tokenId, address from, address to) internal {
-        transferHistory[tokenId]++;
-        emit ArtworkTransferred(tokenId, from, to, transferHistory[tokenId]);
-    }
-
-    function _updateOwnerTokens(address from, address to, uint256 tokenId) internal {
-        uint256[] storage fromTokens = _ownerTokens[from];
-        for (uint256 i = 0; i < fromTokens.length; i++) {
-            if (fromTokens[i] == tokenId) {
-                fromTokens[i] = fromTokens[fromTokens.length - 1];
-                fromTokens.pop();
+    // ---------------- UTILITY ----------------
+    function _removeTokenFromOwner(address tokenOwner, uint256 tokenId) private {
+        uint256[] storage tokens = _ownerTokens[tokenOwner];
+        for (uint256 i = 0; i < tokens.length; i++) {
+            if (tokens[i] == tokenId) {
+                tokens[i] = tokens[tokens.length - 1];
+                tokens.pop();
                 break;
             }
         }
-        _ownerTokens[to].push(tokenId);
     }
 
+    // ---------------- REQUIRED OVERRIDES ----------------
     function tokenURI(uint256 tokenId)
         public
         view
@@ -365,5 +369,14 @@ contract ArtChainNFT is ERC721, ERC721URIStorage, Ownable {
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
+    }
+
+    // Fix for _update function override requirement
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721)
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
     }
 }
