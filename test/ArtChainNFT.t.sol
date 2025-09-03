@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import "forge-std/Test.sol";
-import "../src/ArtChainNFT.sol";
+import {Test} from "forge-std/Test.sol";
+import {ArtChainNFT} from "../src/ArtChainNFT.sol";
 
 contract ArtChainNFTTest is Test {
-    ArtChainNFT public artChainNFT;
+    ArtChainNFT public artChainNft;
     address public owner;
     address public artist;
 
     function setUp() public {
         owner = address(this);
         artist = address(0x1);
-        artChainNFT = new ArtChainNFT();
+        artChainNft = new ArtChainNFT();
     }
 
     function testMintArtwork() public {
@@ -22,7 +22,7 @@ contract ArtChainNFTTest is Test {
         string memory description = "Test Description";
         string memory imageHash = "QmTestHash";
 
-        uint256 tokenId = artChainNFT.mintArtwork(
+        uint256 tokenId = artChainNft.mintArtwork(
             artist,
             uri,
             title,
@@ -31,10 +31,10 @@ contract ArtChainNFTTest is Test {
             imageHash
         );
 
-        assertEq(artChainNFT.balanceOf(artist), 1);
-        assertEq(artChainNFT.tokenURI(tokenId), uri);
+        assertEq(artChainNft.balanceOf(artist), 1);
+        assertEq(artChainNft.tokenURI(tokenId), uri);
         
-        ArtChainNFT.ArtMetadata memory artwork = artChainNFT.getArtworkMetadata(tokenId);
+        ArtChainNFT.ArtMetadata memory artwork = artChainNft.getArtworkMetadata(tokenId);
         assertEq(artwork.title, title);
         assertEq(artwork.artist, artistName);
     }
@@ -43,7 +43,7 @@ contract ArtChainNFTTest is Test {
         vm.prank(artist);
         vm.expectRevert("Ownable: caller is not the owner");
         
-        artChainNFT.mintArtwork(
+        artChainNft.mintArtwork(
             artist,
             "uri",
             "title",
@@ -55,13 +55,13 @@ contract ArtChainNFTTest is Test {
 
     function testGetArtworkRevertsForNonExistentToken() public {
         vm.expectRevert("Artwork does not exist");
-        artChainNFT.getArtworkMetadata(999);
+        artChainNft.getArtworkMetadata(999);
     }
 
     function testTotalSupply() public {
-        assertEq(artChainNFT.totalSupply(), 0);
+        assertEq(artChainNft.totalSupply(), 0);
         
-        artChainNFT.mintArtwork(
+        artChainNft.mintArtwork(
             artist,
             "uri1",
             "title1",
@@ -70,9 +70,9 @@ contract ArtChainNFTTest is Test {
             "hash1"
         );
         
-        assertEq(artChainNFT.totalSupply(), 1);
+        assertEq(artChainNft.totalSupply(), 1);
         
-        artChainNFT.mintArtwork(
+        artChainNft.mintArtwork(
             artist,
             "uri2",
             "title2",
@@ -81,6 +81,6 @@ contract ArtChainNFTTest is Test {
             "hash2"
         );
         
-        assertEq(artChainNFT.totalSupply(), 2);
+        assertEq(artChainNft.totalSupply(), 2);
     }
 }
