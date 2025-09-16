@@ -64,3 +64,24 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+## Fabric (local, no Docker)
+
+A minimal, local-only, Fabric-like stub is included to record curator/auction metadata. It simulates peer/chaincode execution and persists a JSON ledger.
+
+### Run demo
+
+```bash
+cd fabric-samples
+npm install --silent
+npm run demo
+```
+
+Manual usage:
+
+```bash
+node peer.js invoke artchain '{"Args":["putAuction","art1","curatorA","100"]}'
+node peer.js query  artchain '{"Args":["getAuction","art1"]}'
+```
+
+State file: `fabric-samples/state/ledger.json`.
