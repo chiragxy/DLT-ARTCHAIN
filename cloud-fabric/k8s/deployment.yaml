@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-fabric
+  labels:
+    app: cloud-fabric
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: cloud-fabric
+  template:
+    metadata:
+      labels:
+        app: cloud-fabric
+    spec:
+      containers:
+      - name: cloud-fabric
+        image: cloud-fabric:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PORT
+          value: "3000"
+        - name: NODE_ENV
+          value: "production"
+        - name: RPC_URL
+          valueFrom:
+            secretKeyRef:
+              name: cloud-fabric-secrets
+              key: rpc-url
+        - name: CHAIN_ID
+          value: "11155111"
+        - name: PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: cloud-fabric-secrets
+              key: private-key
+        - name: NFT_CONTRACT_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: cloud-fabric-config
+              key: nft-contract-address
+        - name: ERC20_TOKEN_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: cloud-fabric-config
+              key: erc20-token-address
+        - name: BIGCHAINDB_API_URL
+          valueFrom:
+            configMapKeyRef:
+              name: cloud-fabric-config
+              key: bigchaindb-api-url
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: cloud-fabric-config
+              key: redis-url
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-fabric-service
+spec:
+  selector:
+    app: cloud-fabric
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: LoadBalancer
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cloud-fabric-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cloud-fabric
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
