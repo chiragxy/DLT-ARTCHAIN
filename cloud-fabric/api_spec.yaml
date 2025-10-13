@@ -1,0 +1,421 @@
+openapi: 3.0.0
+info:
+  title: Cloud Fabric Auction Service API
+  description: |
+    Cloud Fabric is a microservice for hosting and managing NFT art auctions
+    within the ArtChain ecosystem. It provides endpoints for creating auctions,
+    placing bids, and managing auction lifecycles.
+  version: 1.0.0
+  contact:
+    name: ArtChain Team
+  license:
+    name: ISC
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.artchain.example.com
+    description: Production server
+
+tags:
+  - name: Auction
+    description: Auction management endpoints
+  - name: Health
+    description: Service health check
+
+paths:
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the service is healthy and running
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  service:
+                    type: string
+                    example: cloud-fabric
+
+  /auction/create:
+    post:
+      tags:
+        - Auction
+      summary: Create a new auction
+      description: |
+        Creates a new NFT auction. The creator must be the owner of the NFT.
+        Validates auction duration and NFT ownership before creation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAuctionRequest'
+      responses:
+        '201':
+          description: Auction created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateAuctionResponse'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Creator is not the NFT owner
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auction/{id}:
+    get:
+      tags:
+        - Auction
+      summary: Get auction details
+      description: Retrieves detailed information about a specific auction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Auction ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Auction details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuctionResponse'
+        '404':
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auction/{id}/bid:
+    post:
+      tags:
+        - Auction
+      summary: Place a bid on an auction
+      description: |
+        Places a bid on an active auction. Validates bid amount, ERC20 balance,
+        and allowance before accepting the bid.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Auction ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlaceBidRequest'
+      responses:
+        '200':
+          description: Bid placed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceBidResponse'
+        '400':
+          description: Invalid bid or auction status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auction/{id}/close:
+    post:
+      tags:
+        - Auction
+      summary: Close an auction
+      description: |
+        Closes an ended auction and transfers the NFT to the winner.
+        Also transfers ERC20 tokens from winner to creator.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Auction ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Auction closed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CloseAuctionResponse'
+        '400':
+          description: Auction cannot be closed (not ended or already closed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Auction not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auction/{id}/bids:
+    get:
+      tags:
+        - Auction
+      summary: Get all bids for an auction
+      description: Retrieves the bid history for a specific auction
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Auction ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bids retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    CreateAuctionRequest:
+      type: object
+      required:
+        - nftId
+        - creator
+        - minBid
+        - startTime
+        - endTime
+      properties:
+        nftId:
+          type: string
+          description: The ID of the NFT being auctioned
+          example: "123"
+        creator:
+          type: string
+          description: Ethereum address of the auction creator
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+        minBid:
+          type: string
+          description: Minimum bid amount in wei
+          example: "1000000000000000000"
+        startTime:
+          type: integer
+          description: Unix timestamp for auction start
+          example: 1728457200
+        endTime:
+          type: integer
+          description: Unix timestamp for auction end
+          example: 1728543600
+
+    CreateAuctionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            auctionId:
+              type: string
+              format: uuid
+            bigchainTxId:
+              type: string
+            auction:
+              $ref: '#/components/schemas/Auction'
+
+    Auction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        nftId:
+          type: string
+        creator:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        startTime:
+          type: integer
+        endTime:
+          type: integer
+        minBid:
+          type: string
+          description: Minimum bid in wei (as string to avoid precision loss)
+        currentBid:
+          type: string
+          description: Current highest bid in wei
+        highestBidder:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        status:
+          type: string
+          enum: [OPEN, CLOSED, CANCELLED]
+        createdAt:
+          type: integer
+        transactionHash:
+          type: string
+          nullable: true
+
+    AuctionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/Auction'
+
+    PlaceBidRequest:
+      type: object
+      required:
+        - bidder
+        - amount
+      properties:
+        bidder:
+          type: string
+          description: Ethereum address of the bidder
+          pattern: '^0x[a-fA-F0-9]{40}$'
+          example: "0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+        amount:
+          type: string
+          description: Bid amount in wei
+          example: "2000000000000000000"
+        signature:
+          type: string
+          description: Optional signature for bid verification
+          nullable: true
+
+    PlaceBidResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            bid:
+              $ref: '#/components/schemas/Bid'
+            bidTxId:
+              type: string
+            auction:
+              $ref: '#/components/schemas/Auction'
+
+    Bid:
+      type: object
+      properties:
+        auctionId:
+          type: string
+          format: uuid
+        bidder:
+          type: string
+          pattern: '^0x[a-fA-F0-9]{40}$'
+        amount:
+          type: string
+          description: Bid amount in wei
+        timestamp:
+          type: integer
+        transactionHash:
+          type: string
+          nullable: true
+
+    CloseAuctionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            auction:
+              $ref: '#/components/schemas/Auction'
+            finalizeTxId:
+              type: string
+            transactionHash:
+              type: string
+
+    BidsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Bid'
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: string
+          description: Error message
+          example: "Auction not found"

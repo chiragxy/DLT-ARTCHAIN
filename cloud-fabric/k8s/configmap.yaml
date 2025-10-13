@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-fabric-config
+data:
+  nft-contract-address: "0x..." # Replace with actual deployed address
+  erc20-token-address: "0x..." # Replace with actual deployed address
+  bigchaindb-api-url: "http://bigchaindb:9984/api/v1"
+  redis-url: "redis://redis:6379"
+  min-auction-duration: "3600"
+  max-auction-duration: "604800"
