@@ -3,12 +3,17 @@ import cors from 'cors';
 import { config } from './config';
 import { CloudFabricService } from '../services/cloud_fabric_service';
 import { DemoModeService } from './demo-mode';
+import { bigchainDB } from './bigchaindb-mock';
 
 const app: Application = express();
 
 // Check if DEMO_MODE is enabled
 const DEMO_MODE = process.env.DEMO_MODE === 'true';
 const service = DEMO_MODE ? new DemoModeService() : new CloudFabricService();
+
+// Initialize BigchainDB Mock
+console.log('[BigchainDB Mock] Initialized');
+console.log('[BigchainDB Mock] Stats:', bigchainDB.getStats());
 
 // Middleware
 app.use(cors());
@@ -43,6 +48,34 @@ app.get('/auction/:id/bids', (req, res) => service.getAuctionBids(req, res));
 if (DEMO_MODE && 'listAuctions' in service) {
   app.get('/auctions', (req, res) => (service as DemoModeService).listAuctions(req, res));
 }
+
+// BigchainDB endpoints
+app.post('/bigchaindb/asset', async (req, res) => {
+  try {
+    const { assetData, metadata } = req.body;
+    const txId = await bigchainDB.createAsset(assetData, metadata);
+    res.status(201).json({ success: true, transactionId: txId });
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
+app.get('/bigchaindb/transaction/:id', async (req, res) => {
+  try {
+    const tx = await bigchainDB.getTransaction(req.params.id);
+    if (tx) {
+      res.json({ success: true, data: tx });
+    } else {
+      res.status(404).json({ success: false, error: 'Transaction not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: String(error) });
+  }
+});
+
+app.get('/bigchaindb/stats', (req, res) => {
+  res.json({ success: true, data: bigchainDB.getStats() });
+});
 
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: any) => {
